@@ -61,10 +61,10 @@ function doAgencies($agencies) {
     $objWriter = PHPWord_IOFactory::createWriter($document, 'Word2007');
     $objWriter->save('Text.docx');
 }
-
+$filename = "fosa_" . date('H_i_s') . ".docx";
 logInfo("Started");
-if(file_exists('fosa.docx')) {
-    unlink('fosa.docx');
+if(file_exists($filename)) {
+    unlink($filename);
     logInfo('Removed old file');
 }
 logInfo("Getting FOSA");
@@ -182,5 +182,6 @@ foreach($agencies as $agency) {
 }
 logInfo("Saving...");
 $objWriter = PHPWord_IOFactory::createWriter($document, 'Word2007');
-$objWriter->save('fosa.docx');
+$objWriter->save($filename);
 logInfo("Saved");
+logInfo("Open: " . $filename);
