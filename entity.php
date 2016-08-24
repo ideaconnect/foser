@@ -38,7 +38,7 @@ function parseEntity($agency) {
     $section->addTextBreak(1);
 
     $section->addText("Kategorie:", array('name'=>'Calibri', 'bold' => true, 'size' => 12));
-    foreach(array_keys($agency->locations) as $element) {
+    foreach(array_keys($agency->categories) as $element) {
         $section->addListItem($element, 0);
     }
     $section->addTextBreak(1);

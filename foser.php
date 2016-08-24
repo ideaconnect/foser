@@ -180,5 +180,7 @@ foreach($agencies as $agency) {
     logInfo("Agency: [ ".$i."/".$max." ]"   . $agency->title);
     parseEntity($agency);
 }
+logInfo("Saving...");
 $objWriter = PHPWord_IOFactory::createWriter($document, 'Word2007');
 $objWriter->save('fosa.docx');
+logInfo("Saved");
