@@ -1,7 +1,37 @@
 <?php
+include "vendor/autoload.php";
 include "lib/PHPWord.php";
 include "agency.php";
 include "log.php";
+$document = new PHPWord();
+include "entity.php";
+$outTax = array(
+ 'Całodobowe' => array('k'=>'Oddziaływania całodobowe',
+   'Dom Pomocy Społecznej' => array('exclude'=>'dzienny','match'=>'dom pomocy,pomoc spoleczna', 'elems'=>array()),
+   'Szpitale - Oddziały Stacjonarne' => array('match'=>'szpital', 'elems'=>array()),
+   'Mieszkania chronione' => array('match'=>'chronione', 'elems'=>array()),
+   'Hotel Sitowie, Hostel Sitowie' => array('match'=>'hotel,hostel,sitowie', 'elems'=>array()),
+   'Pozostałe' => array('elems'=>array())
+ ),
+ 'Dzienne' => array('k'=>'Całodzienne formy',
+   'Klub Samopomocy' => array('match'=>'klub', 'elems'=>array()), 
+   'Środowiskowy Dom Samopomocy' => array('match'=>'sdś,środowiskowy', 'elems'=>array()),
+   'Warsztat Terapii Zajęciowej' => array('match'=>'warsztat terapii,terapia zajęciowa', 'elems'=>array()),
+   'Oddział dzienny' => array('match'=>'oddzial dzienny', 'elems'=>array()),
+   'Dzienny Dom Pomocy Społecznej' => array('match'=>'dom pomocy,pomoc spoleczna', 'elems'=>array()),
+   'Pozostałe' => array('elems'=>array())
+ ),
+ 'Doraźne' => array('k'=>'Doraźne wsparcie',
+   'Poradnia Psychologiczno - Pedagogiczna' => array('match'=>'poradnia psychologiczno,pedagogiczna', 'elems'=>array()),
+   'Poradnia Rodzinna' => array('match'=>'poradnia rodzinna', 'elems'=>array()),
+   'Poradnia Leczenia Uzależnień' => array('match'=>'poradnia leczenia uzależnie', 'elems'=>array()),
+   'Poradnia Zdrowia Psychicznego' => array('match'=>'poradnia zdrowia', 'elems'=>array()),
+   'Poradnia Psychologiczna' => array('match'=>'poradnia psychologniczna', 'elems'=>array()),
+   'Specjalistyczne usługi opiekuńcze' => array('match'=>'specjalistyczne,usługi opiekuńcze', 'elems'=>array()),
+   'Pozostałe' => array('elems'=>array())
+ ),
+);
+
 
 function getRegexp($regexp, $text) {
    $matches = array();
@@ -11,6 +41,16 @@ function getRegexp($regexp, $text) {
    }
    $string=$matches[1][0];
    return html_entity_decode($string);
+}
+
+function getRegexpa($regexp, $text) {
+   $matches = array();
+   $c=preg_match_all ("/".$regexp."/is", $text, $matches);
+   if($c === false || $c === 0) {
+       return null;
+   }
+   $string=$matches[1];
+   return $string;
 }
 
 function cleanLogos() {
@@ -68,6 +108,9 @@ if(file_exists($filename)) {
     logInfo('Removed old file');
 }
 logInfo("Getting FOSA");
+if(file_exists('flat.out')) {
+    $flatAgencies = unserialize(file_get_contents('flat.out'));
+}  else {
 $page = file_get_contents("http://wsparciewgdansku.pl/");
 logInfo("Getting categories...");
 $categories = getCategories($page);
@@ -107,7 +150,7 @@ function parseTaxonomyPage($page, $type, $taxonomy) {
     //2 = title
     //3 = adres
     //4 = filters html;
-    $regex = '<div class="item-title">.*?<a href="(.*?)">.*?<h3>(.*?)<\/h3>.*?<span class="label">Adres:<\/span>.*?<span class="value">(.*?)<\/span>.*?<ul class="item-filters">(.*?)<\/ul>';
+    $regex = '<div class="item-title">.*?<a href="(.*?)">.*?<h3>(.*?)<\/h3>.*?<p class="txtrows-4">(.*?)<\/p>.*?<span class="label">Adres:<\/span>.*?<span class="value">(.*?)<\/span>.*?<ul class="item-filters">(.*?)<\/ul>';
     $c=preg_match_all ("/".$regex."/is", $page, $matches, PREG_SET_ORDER);
     $i = 0;
     foreach($matches as $match) {
@@ -115,7 +158,9 @@ function parseTaxonomyPage($page, $type, $taxonomy) {
         $url = $match[1];
         $id = sha1($url);
         $title = html_entity_decode($match[2]);
-        $address = $match[3];
+        $address = $match[4];
+        $short = $match[3];
+        
 
         if(array_key_exists($id, $agencies)) {
             $agency = $agencies[$id];
@@ -125,6 +170,7 @@ function parseTaxonomyPage($page, $type, $taxonomy) {
         $agency->title = $title;
         $agency->url = $url;
         $agency->address = $address;
+        $agency->short = $short;
         if($type === 'loc') {
             $agency->locations[$taxonomy] = true;
         }
@@ -133,7 +179,7 @@ function parseTaxonomyPage($page, $type, $taxonomy) {
             $agency->categories[$taxonomy] = true;
         }
 
-        $tags = getTags($match[4]);
+        $tags = getTags($match[5]);
         foreach($tags as $tag) {
             $agency->tags[$tag] = true;
         }
@@ -148,8 +194,22 @@ function parseTaxonomy($taxonomy, $taxonomyType) {
     foreach($taxonomy as $categoryUrl => $category) {
         logInfo("Parsing: " . $category);
         $url = $categoryUrl;
+        $i = 0;
         while(true) {
             $page = file_get_contents($url);
+            $i++;
+    $screenCapture = new Screen\Capture("http://127.0.0.1/foser/fos.php?u=" . base64_encode($url));
+    $screenCapture->setWidth(1366);
+    $screenCapture->setHeight(6500);
+    $screenCapture->setTimeout(15000);
+    $screenCapture->binPath = '/opt/phantomjs-2.1.1-linux-x86_64/bin/';
+    $screenCapture->setImageType(Screen\Image\Types\Png::FORMAT);
+    $screenCapture->setImageType('png');
+
+
+    $fileLocation = 'taxonomy/' . $taxonomyType . "_" . $category . "_" . $i . '.' . $screenCapture->getImageType()->getFormat();
+    $screenCapture->save($fileLocation);
+
             logInfo("Parsing taxonomy page.");
             $count = parseTaxonomyPage($page, $taxonomyType, $category);
             logInfo("Got: " . $count . " agencies");
@@ -171,15 +231,79 @@ parseTaxonomy($categories, 'cat');
 logInfo(" --- LOCATIONS");
 parseTaxonomy($locations, 'loc');
 
-$document = new PHPWord();
-include "entity.php";
 $max = count($agencies);
 $i = 0;
+$flatAgencies = array();
+$inne = array();
 foreach($agencies as $agency) {
     $i++;
     logInfo("Agency: [ ".$i."/".$max." ]"   . $agency->title);
-    parseEntity($agency);
+    $flatAgencies[] = parseEntity($agency);
 }
+}
+
+file_put_contents('flat.out', serialize($flatAgencies));
+foreach($flatAgencies as $agency) {
+  $matched = false;
+  foreach($outTax as $category => $subcategories) {
+    $categoryMatch = $subcategories['k'];
+    if(in_array($categoryMatch, array_keys($agency->categories)) || in_array($categoryMatch, array_keys($agency->tags))) { //pasuje do kategorii
+      $submatch = false;
+
+  foreach($subcategories as $realCategory => $settings) {
+     if($realCategory == 'k' || $realCategory == 'Pozostałe') continue;
+     $title = strtolower($agency->title);
+     if(array_key_exists('exclude', $settings)) {
+       $exclude = $settings['exclude'];
+       if(strstr($title, $exclude) !== false) {
+         continue;
+       }
+     }
+
+     $include = explode(',', $settings['match']);
+     foreach($include as $needle) {
+       if(strstr($title, $needle)) {
+         $outTax[$category][$realCategory]['elems'][] = $agency;
+         logInfo($realCategory . ' => ' . $agency->title);
+         $submatch = true;
+         break;
+       }
+     }
+     if($submatch === true) break;
+  }    
+
+      if($submatch == false) { //nie pasowalo do zadnej subkategorii
+        $outTax[$category]["Pozostałe"]['elems'][] = $agency;
+      }
+    }
+  }
+
+  if($matched === false) {
+    $inne[] = $agency;
+  }
+}
+
+foreach($outTax as $category => $subcategories) {
+  $section = $document->createSection();
+  $section->addText('# ' . $category, array('name'=>'Calibri', 'bold' => true, 'size' => 20));
+  foreach($subcategories as $realCategory => $settings) {
+    if($realCategory == 'k') continue;
+    $section->addText('## ' . $realCategory, array('name'=>'Calibri', 'bold' => true, 'size' => 18));
+    foreach($settings['elems'] as $agency) {
+      outputEntity($agency, $section);
+    }
+  }
+}
+
+$section = $document->createSection();
+$section->addText("# Inne", array('name'=>'Calibri', 'bold' => true, 'size' => 20));
+foreach($inne as $agency) {
+  outputEntity($agency, $section);
+}
+
+shell_exec("zip -9 -r shots.zip shoty/");
+logInfo("Shoty: shots.zip");
+
 logInfo("Saving...");
 $objWriter = PHPWord_IOFactory::createWriter($document, 'Word2007');
 $objWriter->save($filename);
